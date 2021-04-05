@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:padding="8dp"
+    android:layout_marginBottom="4dp"
+    android:layout_height="wrap_content">
+
+    <TextView
+        android:id="@+id/txtWaypointLocation"
+        android:text="커피숍"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        tools:ignore="HardcodedText" />
+
+    <TextView
+        android:id="@+id/txtWaypointBeginTime"
+        android:layout_width="wrap_content"
+        android:text="18:00"
+        android:layout_toStartOf="@id/txtWave"
+        android:layout_height="wrap_content"
+        tools:ignore="HardcodedText" />
+
+    <TextView
+        android:id="@+id/txtWave"
+        android:text="@string/wave"
+        android:layout_marginStart="4dp"
+        android:layout_marginEnd="4dp"
+        android:layout_toStartOf="@id/txtWaypointEndTime"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content" />
+
+    <TextView
+        android:id="@+id/txtWaypointEndTime"
+        android:layout_alignParentEnd="true"
+        android:text="19:00"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        tools:ignore="HardcodedText" />
+
+</RelativeLayout>
