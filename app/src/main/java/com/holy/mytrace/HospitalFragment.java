@@ -200,15 +200,6 @@ public class HospitalFragment extends Fragment implements OnMapReadyCallback, Ta
 
         HospitalAdapter adapter = new HospitalAdapter(hospitalList);
         recycler.setAdapter(adapter);
-
-        adapter.setOnItemClickListener(position -> {
-            Intent intent = new Intent(getContext(), RouteActivity.class);
-            intent.putExtra(RouteActivity.EXTRA_ORIGIN_LATITUDE, mCurrentLocation.getLatitude());
-            intent.putExtra(RouteActivity.EXTRA_ORIGIN_LONGITUDE, mCurrentLocation.getLongitude());
-            intent.putExtra(RouteActivity.EXTRA_DESTINATION_LATITUDE, hospitalList.get(position).getLatitude());
-            intent.putExtra(RouteActivity.EXTRA_DESTINATION_LONGITUDE, hospitalList.get(position).getLongitude());
-            startActivity(intent);
-        });
     }
 
     private void buildHospitalMarkers(List<Hospital> hospitalList) {
