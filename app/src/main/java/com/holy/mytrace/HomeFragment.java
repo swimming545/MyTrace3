@@ -1,6 +1,8 @@
 package com.holy.mytrace;
 
 import android.Manifest;
+import android.content.Context;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.location.Location;
 import android.os.Bundle;
@@ -13,23 +15,21 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import android.os.Looper;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationCallback;
 import com.google.android.gms.location.LocationRequest;
 import com.google.android.gms.location.LocationResult;
 import com.google.android.gms.location.LocationServices;
-import com.google.android.gms.maps.CameraUpdate;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
-import com.google.android.gms.maps.model.BitmapDescriptor;
 import com.google.android.gms.maps.model.BitmapDescriptorFactory;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.Marker;
@@ -39,7 +39,6 @@ import com.holy.mytrace.helpers.SQLiteHelper;
 import com.holy.mytrace.models.Waypoint;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -47,20 +46,41 @@ import java.util.Locale;
 
 public class HomeFragment extends Fragment implements OnMapReadyCallback {
 
-    public static final int REQUEST_FINE_LOCATION = 100;
-    public static final double THRESHOLD_WAYPOINT_METERS = 50;
+    private GoogleMap mGoogleMap;
+    private FusedLocationProviderClient mFusedLocationClient;
+    private LocationCallback mLocationCallback;
+    private LocationRequest mLocationRequest;
+    private Location mCurrentLocation;
 
-    private GoogleMap googleMap;
+    private List<Marker> mMarkerList;
+    private Marker mCurrentMarker;
 
-    private FusedLocationProviderClient fusedLocationClient;
-    private LocationCallback locationCallback;
-    private LocationRequest locationRequest;
-    private boolean requestingLocationUpdates;
 
-    private List<Waypoint> waypointList;
-    private WaypointAdapter waypointAdapter;
-    private RecyclerView waypointRecycler;
-    private List<Marker> markerList;
+    @Override
+    public void onAttach(@NonNull Context context) {
+        super.onAttach(context);
+
+        mFusedLocationClient = LocationServices.getFusedLocationProviderClient(context);
+
+        mLocationRequest = LocationRequest.create();
+        mLocationRequest.setInterval(10000);
+        mLocationRequest.setFastestInterval(5000);
+        mLocationRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
+
+        mLocationCallback = new LocationCallback() {
+            @Override
+            public void onLocationResult(@NonNull LocationResult locationResult) {
+
+                Location location = locationResult.getLastLocation();
+
+                if (mGoogleMap != null && mCurrentLocation == null) {
+                    updateLocationUIs(location, false);
+                }
+
+                mCurrentLocation = location;
+            }
+        };
+    }
 
     @Nullable
     @Override
@@ -68,45 +88,10 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
                              @Nullable ViewGroup container,
                              @Nullable Bundle savedInstanceState) {
 
-        if (getContext() == null) {
-            return null;
-        }
-
         View view = inflater.inflate(R.layout.fragment_home, container, false);
 
-        buildWaypointUI(view);
-
-        fusedLocationClient = LocationServices.getFusedLocationProviderClient(getContext());
-        locationCallback = new LocationCallback() {
-            @Override
-            public void onLocationResult(LocationResult locationResult) {
-                if (locationResult == null) {
-                    return;
-                }
-
-                Location location = locationResult.getLastLocation();
-                LatLng latLng = new LatLng(location.getLatitude(), location.getLongitude());
-
-                // 당일 waypoint 가 하나도 없으면 바로 추가
-                if (waypointList.isEmpty()) {
-                    addWaypoint(latLng);
-                    return;
-                }
-
-                // 최초 카메라 이동
-                if (locationResult.getLocations().size() == 1) {
-                    CameraUpdate cameraUpdate = CameraUpdateFactory.newLatLngZoom(latLng, 12.0f);
-                    googleMap.moveCamera(cameraUpdate);
-                }
-
-                // TODO: 5분을 머물렀는지 판단해서 waypoint 추가
-            }
-        };
-
-        locationRequest = LocationRequest.create();
-        locationRequest.setInterval(5000);
-        locationRequest.setFastestInterval(2500);
-        locationRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
+        // Waypoint UI 업데이트
+        updateWaypointUIs();
 
         // 날짜 UI 업데이트
         updateDateUI(view);
@@ -114,143 +99,164 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
         return view;
     }
 
-    private void addWaypoint(LatLng latLng) {
-
-        Waypoint waypoint = new Waypoint(latLng.latitude, latLng.longitude,
-                LocalDateTime.now(), LocalDateTime.now());
-
-        SQLiteHelper.getInstance(getContext()).addWaypoint(waypoint);
-        updateWaypointUI();
-
-        if (googleMap != null) {
-            CameraUpdate cameraUpdate = CameraUpdateFactory.newLatLngZoom(latLng, 12.0f);
-            googleMap.moveCamera(cameraUpdate);
-        }
-    }
-
-    private void buildWaypointUI(View v) {
-
-        waypointRecycler = v.findViewById(R.id.recyclerWaypoint);
-        waypointRecycler.setHasFixedSize(true);
-        waypointRecycler.setLayoutManager(new LinearLayoutManager(getContext()));
-
-        waypointList = new ArrayList<>();
-        waypointAdapter = new WaypointAdapter(waypointList);
-        waypointRecycler.setAdapter(waypointAdapter);
-
-        markerList = new ArrayList<>();
-    }
-
-    private void updateWaypointUI() {
-
-        // 리사이클러뷰 업데이트
-        LocalDate date = LocalDate.now();
-
-        waypointList.clear();
-        waypointList.addAll(SQLiteHelper.getInstance(getContext())
-                .getWaypointsByDate(date.getYear(), date.getMonthValue(), date.getDayOfMonth())
-        );
-
-        waypointAdapter.notifyDataSetChanged();
-
-        // 마커 업데이트
-        for (Marker marker : markerList) {
-            marker.remove();
-        }
-        markerList.clear();
-
-        for (Waypoint waypoint : waypointList) {
-            LatLng latLng = new LatLng(waypoint.getLatitude(), waypoint.getLongitude());
-            BitmapDescriptor bd = BitmapDescriptorFactory.fromResource(R.drawable.pin);
-            Marker marker = googleMap.addMarker(new MarkerOptions().position(latLng).icon(bd));
-            markerList.add(marker);
-        }
-    }
 
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
+
+        if (getActivity() == null || getContext() == null) {
+            return;
+        }
+
+        // 구글맵 초기화
         SupportMapFragment mapFragment =
                 (SupportMapFragment) getChildFragmentManager().findFragmentById(R.id.map);
         if (mapFragment != null) {
             mapFragment.getMapAsync(this);
+        }
+
+        // 현위치로 카메라 이동
+        if (ActivityCompat.checkSelfPermission(getContext(), Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                || ActivityCompat.checkSelfPermission(getContext(), Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            mFusedLocationClient.getLastLocation().addOnSuccessListener(location -> {
+                mCurrentLocation = location;
+                if (mGoogleMap != null) {
+                   updateLocationUIs(location, true);
+                }
+            });
         }
     }
 
     @Override
     public void onResume() {
         super.onResume();
-        if (requestingLocationUpdates) {
-            startLocationUpdates();
+
+        // Waypoint UI 업데이트
+        updateWaypointUIs();
+
+        // 위치 업데이트 시작
+        if (getContext() != null &&
+                ActivityCompat.checkSelfPermission(getContext(), Manifest.permission.ACCESS_FINE_LOCATION)
+                        == PackageManager.PERMISSION_GRANTED ||
+                ActivityCompat.checkSelfPermission(getContext(), Manifest.permission.ACCESS_COARSE_LOCATION)
+                        == PackageManager.PERMISSION_GRANTED) {
+            mFusedLocationClient.requestLocationUpdates(mLocationRequest, mLocationCallback, Looper.getMainLooper());
         }
     }
 
     @Override
     public void onPause() {
         super.onPause();
-        stopLocationUpdates();
+
+        // 위치 업데이트 종료
+        mFusedLocationClient.removeLocationUpdates(mLocationCallback);
     }
 
-    @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+    // 현위치 UI 업데이트
 
-        if (requestCode == REQUEST_FINE_LOCATION) {
-            // 위치 퍼미션 결과 확인
-            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                // 퍼미션 승인 시
-                // 위치 업데이트 시작
-                startLocationUpdates();
-            } else {
-                // 퍼미션 거부 시
-                // 토스트 출력
-                Toast.makeText(getContext(),
-                        "위치 퍼미션이 없으면 현재 위치를 확인할 수 없습니다.", Toast.LENGTH_SHORT).show();
+    private void updateLocationUIs(Location location, boolean moveCamera) {
+
+        if (mCurrentMarker != null) {
+            mCurrentMarker.remove();
+        }
+
+        // 현위치 마커 추가
+        LatLng latLng = new LatLng(location.getLatitude(), location.getLongitude());
+        mCurrentMarker = mGoogleMap.addMarker(new MarkerOptions().position(latLng));
+
+        if (mGoogleMap != null && moveCamera) {
+            if (getContext() != null &&
+                    ActivityCompat.checkSelfPermission(getContext(), Manifest.permission.ACCESS_FINE_LOCATION)
+                            == PackageManager.PERMISSION_GRANTED ||
+                    ActivityCompat.checkSelfPermission(getContext(), Manifest.permission.ACCESS_COARSE_LOCATION)
+                            == PackageManager.PERMISSION_GRANTED) {
+                mFusedLocationClient.getLastLocation().addOnSuccessListener(lastLocation -> {
+                    LatLng lastLatLng = new LatLng(lastLocation.getLatitude(), lastLocation.getLongitude());
+                    mGoogleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(lastLatLng, 15.0f));
+                    Log.d("TAG", "moveCamera: ");
+                });
             }
+        }
+    }
+
+    public void updateLocationUIs(boolean moveCamera) {
+
+        if (mCurrentLocation != null) {
+            updateLocationUIs(mCurrentLocation, moveCamera);
+        }
+    }
+
+    // Waypoint UI 업데이트
+
+    public void updateWaypointUIs() {
+
+        // 오늘 Waypoint 모두 획득
+        LocalDate today = LocalDate.now();
+        List<Waypoint> waypointList = SQLiteHelper.getInstance(getContext())
+                .getWaypointsByDate(today.getYear(), today.getMonthValue(), today.getDayOfMonth());
+
+        // Waypoint 리사이클러뷰 업데이트
+        buildWaypointRecycler(waypointList);
+
+        if (mGoogleMap != null) {
+            // Waypoint 마커 업데이트
+            buildWaypointMarkers(waypointList);
+        }
+    }
+
+    // Waypoint 리사이클러뷰 업데이트
+
+    private void buildWaypointRecycler(List<Waypoint> waypointList) {
+
+        View view = getView();
+        if (view == null) {
+            return;
+        }
+
+        RecyclerView recyclerView = view.findViewById(R.id.recyclerWaypoint);
+        recyclerView.setHasFixedSize(true);
+        recyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
+        recyclerView.setAdapter(new WaypointAdapter(waypointList));
+    }
+
+    // Waypoint 마커 업데이트
+
+    private void buildWaypointMarkers(List<Waypoint> waypointList) {
+
+        // 기존의 마커 모두 지우기
+        if (mMarkerList != null) {
+            for (Marker marker : mMarkerList) {
+                marker.remove();
+            }
+        }
+
+        mMarkerList = new ArrayList<>();
+
+        // 새로운 마커 생성하기
+        for (Waypoint wayPoint : waypointList) {
+            MarkerOptions options = new MarkerOptions()
+                    .position(new LatLng(wayPoint.getLatitude(), wayPoint.getLongitude()))
+                    .icon(BitmapDescriptorFactory.fromResource(R.drawable.pin))
+                    .title(wayPoint.getName());
+            Marker newMarker = mGoogleMap.addMarker(options);
+            mMarkerList.add(newMarker);
         }
     }
 
     @Override
     public void onMapReady(GoogleMap googleMap) {
 
-        this.googleMap = googleMap;
+        mGoogleMap = googleMap;
+        googleMap.getUiSettings().setZoomControlsEnabled(true);
 
-        updateWaypointUI();
-
-        // 현재 위치 확보
-
-        // - 먼저 위치 퍼미션 확인
-        if (ActivityCompat.checkSelfPermission(getContext(), Manifest.permission.ACCESS_FINE_LOCATION)
-                != PackageManager.PERMISSION_GRANTED) {
-            // 퍼미션 없을 시, 퍼미션 요청하기
-            requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, REQUEST_FINE_LOCATION);
-            return;
+        if (mCurrentLocation != null) {
+            updateLocationUIs(mCurrentLocation, true);
         }
 
-        // - 위치 업데이트 시작
-        startLocationUpdates();
-    }
-
-    private void startLocationUpdates() {
-
-        if (ActivityCompat.checkSelfPermission(getContext(), Manifest.permission.ACCESS_FINE_LOCATION)
-                != PackageManager.PERMISSION_GRANTED) {
-            return;
+        if (mMarkerList == null) {
+            updateWaypointUIs();
         }
-
-        requestingLocationUpdates = true;
-        fusedLocationClient.requestLocationUpdates(locationRequest,
-                locationCallback,
-                Looper.getMainLooper());
     }
-
-    private void stopLocationUpdates() {
-
-        requestingLocationUpdates = false;
-        fusedLocationClient.removeLocationUpdates(locationCallback);
-    }
-
-
 
     private void updateDateUI(View view) {
 
@@ -267,4 +273,7 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
         TextView dateText = view.findViewById(R.id.txtDate);
         dateText.setText(strDate);
     }
+
+
+
 }

@@ -21,15 +21,16 @@ public class SQLiteHelper extends SQLiteOpenHelper {
     // 데이터베이스 이름
     private static final String DATABASE_NAME = "database";
     // 현재 버전
-    private static final int DATABASE_VERSION = 3;
+    private static final int DATABASE_VERSION = 12;
 
-    // 일 테이블의 정보
+    // 테이블의 정보
     public static final String TABLE_WAYPOINTS = "waypoints";
     public static final String COLUMN_WAYPOINT_ID = "id";
     public static final String COLUMN_WAYPOINT_LATITUDE = "latitude";
     public static final String COLUMN_WAYPOINT_LONGITUDE = "longitude";
     public static final String COLUMN_WAYPOINT_BEGIN_TIME = "begin_time";
     public static final String COLUMN_WAYPOINT_END_TIME = "end_time";
+    public static final String COLUMN_WAYPOINT_NAME = "name";
 
     // 데이터베이스 헬퍼 객체
     private static SQLiteHelper instance;
@@ -57,7 +58,8 @@ public class SQLiteHelper extends SQLiteOpenHelper {
                 COLUMN_WAYPOINT_LATITUDE + " NUMBER NOT NULL, " +
                 COLUMN_WAYPOINT_LONGITUDE + " NUMBER NOT NULL, " +
                 COLUMN_WAYPOINT_BEGIN_TIME + " TEXT NOT NULL, " +
-                COLUMN_WAYPOINT_END_TIME + " TEXT NOT NULL" +
+                COLUMN_WAYPOINT_END_TIME + " TEXT NOT NULL, " +
+                COLUMN_WAYPOINT_NAME + " TEXT NOT NULL" +
                 ")";
         db.execSQL(CREATE_WAYPOINTS_TABLE);
     }
@@ -88,6 +90,7 @@ public class SQLiteHelper extends SQLiteOpenHelper {
             values.put(COLUMN_WAYPOINT_LONGITUDE, waypoint.getLongitude());
             values.put(COLUMN_WAYPOINT_BEGIN_TIME, waypoint.getBeginTime().toString());
             values.put(COLUMN_WAYPOINT_END_TIME, waypoint.getEndTime().toString());
+            values.put(COLUMN_WAYPOINT_NAME, waypoint.getName());
 
             // 데이터베이스에 values 를 입력한다.
             db.insertOrThrow(TABLE_WAYPOINTS, null, values);
@@ -100,12 +103,56 @@ public class SQLiteHelper extends SQLiteOpenHelper {
         }
     }
 
+    // 주어진 조건과 일치하는 Waypoint 가 있는지 확인
+
+    public boolean hasWaypoint(LocalDateTime beginTime) {
+
+        boolean has = false;
+
+        // 읽기용 DB 열기
+        SQLiteDatabase db = getReadableDatabase();
+
+        // 데이터베이스의 테이블을 가리키는 커서를 가져온다.
+        String SELECT_WAYPOINTS =
+                "SELECT * FROM " + TABLE_WAYPOINTS
+                        + " WHERE " + COLUMN_WAYPOINT_BEGIN_TIME + " = '" + beginTime.toString() + "'";
+        Cursor cursor = db.rawQuery(SELECT_WAYPOINTS, null);
+
+        try {
+            if (cursor.moveToFirst()) {
+                has = true;
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            if (cursor != null && !cursor.isClosed()) {
+                cursor.close();
+            }
+        }
+        return has;
+    }
+
+    // 주어진 조건과 일치하는 Waypoint 의 endTime 업데이트
+
+    public void updateWaypoint(LocalDateTime beginTime, LocalDateTime endTime) {
+
+        // 쓰기용 DB 열기
+        SQLiteDatabase db = getWritableDatabase();
+
+        ContentValues values = new ContentValues();
+        values.put(COLUMN_WAYPOINT_END_TIME, endTime.toString());
+
+        db.update(TABLE_WAYPOINTS, values,
+                COLUMN_WAYPOINT_BEGIN_TIME + " = ?",
+                new String[]{beginTime.toString()});
+    }
+
     // 날짜로 검색
 
     public List<Waypoint> getWaypointsByDate(int year, int month, int date) {
 
         List<Waypoint> waypointList = new ArrayList<>();
-        String strDate = String.format(Locale.getDefault(), "%d-%02d-%02d", year, month,date);
+        String strDate = String.format(Locale.getDefault(), "%d-%02d-%02d", year, month, date);
 
         // 읽기용 DB 열기
         SQLiteDatabase db = getReadableDatabase();
@@ -126,10 +173,11 @@ public class SQLiteHelper extends SQLiteOpenHelper {
                     double longitude = cursor.getDouble(cursor.getColumnIndex(COLUMN_WAYPOINT_LONGITUDE));
                     String strBeginTime = cursor.getString(cursor.getColumnIndex(COLUMN_WAYPOINT_BEGIN_TIME));
                     String strEndTime = cursor.getString(cursor.getColumnIndex(COLUMN_WAYPOINT_END_TIME));
+                    String name = cursor.getString(cursor.getColumnIndex(COLUMN_WAYPOINT_NAME));
 
                     // 정보로 객체를 만들어 리스트에 추가한다.
                     Waypoint waypoint = new Waypoint(id, latitude, longitude,
-                            LocalDateTime.parse(strBeginTime), LocalDateTime.parse(strEndTime));
+                            LocalDateTime.parse(strBeginTime), LocalDateTime.parse(strEndTime), name);
                     waypointList.add(waypoint);
 
                     // 테이블 끝에 도달할 때까지 실시한다.
@@ -143,6 +191,16 @@ public class SQLiteHelper extends SQLiteOpenHelper {
             }
         }
         return waypointList;
+    }
+
+    // 14일 지난 기록 폐기
+    public void discardWaypoints(LocalDateTime date) {
+
+        // 쓰기용 DB 열기
+        SQLiteDatabase db = getWritableDatabase();
+
+        db.delete(TABLE_WAYPOINTS,
+                COLUMN_WAYPOINT_BEGIN_TIME + " < ?", new String[] { date.toString() });
     }
 
 }

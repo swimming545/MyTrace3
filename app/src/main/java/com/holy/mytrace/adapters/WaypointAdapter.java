@@ -44,9 +44,7 @@ public class WaypointAdapter extends RecyclerView.Adapter<WaypointAdapter.ViewHo
 
         public void bind(Waypoint model, OnItemClickListener listener) {
 
-            String strLocation = String.format(Locale.getDefault(), "%f, %f",
-                    model.getLatitude(), model.getLongitude());
-            locationText.setText(strLocation);
+            locationText.setText(model.getName());
 
             String strBeginTime = String.format(Locale.getDefault(), "%02d : %02d",
                     model.getBeginTime().getHour(), model.getBeginTime().getMinute());

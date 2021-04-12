@@ -6,4 +6,7 @@
     <string name="trace">이동경로</string>
     <string name="hospital">의료시설</string>
     <string name="wave">~</string>
+    <string name="hospital_center">병원</string>
+    <string name="pharmacy">약국</string>
+    <string name="see_prev_day">어제 경로 보기</string>
 </resources>

@@ -5,27 +5,31 @@ import java.time.LocalDateTime;
 public class Waypoint {
 
     // 고유키
-    int id;
+    private int id;
     // GPS 좌표
-    double latitude;
-    double longitude;
+    private double latitude;
+    private double longitude;
     // 시간
-    LocalDateTime beginTime;
-    LocalDateTime endTime;
+    private LocalDateTime beginTime;
+    private LocalDateTime endTime;
+    // 장소명
+    private String name;
 
-    public Waypoint(int id, double latitude, double longitude, LocalDateTime beginTime, LocalDateTime endTime) {
+    public Waypoint(int id, double latitude, double longitude, LocalDateTime beginTime, LocalDateTime endTime, String name) {
         this.id = id;
         this.latitude = latitude;
         this.longitude = longitude;
         this.beginTime = beginTime;
         this.endTime = endTime;
+        this.name = name;
     }
 
-    public Waypoint(double latitude, double longitude, LocalDateTime beginTime, LocalDateTime endTime) {
+    public Waypoint(double latitude, double longitude, LocalDateTime beginTime, LocalDateTime endTime, String name) {
         this.latitude = latitude;
         this.longitude = longitude;
         this.beginTime = beginTime;
         this.endTime = endTime;
+        this.name = name;
     }
 
     public int getId() {
@@ -48,4 +52,7 @@ public class Waypoint {
         return endTime;
     }
 
+    public String getName() {
+        return name;
+    }
 }
